@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8">
+  <title>Yan – Webbaserad Prototyp</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      margin: 20px;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      max-width: 800px;
+      margin-bottom: 20px;
+    }
+    th, td {
+      border: 1px solid #ccc;
+      padding: 8px;
+      text-align: center;
+    }
+    th {
+      background: #f5f5f5;
+    }
+    input[type="number"] {
+      width: 60px;
+      padding: 4px;
+      box-sizing: border-box;
+    }
+    .readonly {
+      background: #eee;
+    }
+    button {
+      padding: 10px 20px;
+      font-size: 16px;
+    }
+  </style>
+</head>
+<body>
+
+<h1>Yan – Webprototyp</h1>
+<p>Fyll i dina poäng och klicka “Beräkna” för att se totalsummor.</p>
+
+<table>
+  <tr>
+    <th>Ruta</th>
+    <th>Kolumn 1<br>Uppifrån &amp; ner (×2)</th>
+    <th>Kolumn 2<br>Fritt spel (×1)</th>
+    <th>Kolumn 3<br>Nerifrån &amp; upp (×3)</th>
+    <th>Kolumn 4<br>Första slaget (×4)</th>
+  </tr>
+  <script>
+    const rows = [
+      {key:'r1', label:'1:or'},
+      {key:'r2', label:'2:or'},
+      {key:'r3', label:'3:or'},
+      {key:'r4', label:'4:or'},
+      {key:'r5', label:'5:or'},
+      {key:'r6', label:'6:or'},
+      {key:'sum16', label:'Summa (1–6)', readonly:true},
+      {key:'bonus', label:'Bonus', readonly:true},
+      {key:'min', label:'MIN (-)'},
+      {key:'max', label:'MAX (+)'},
+      {key:'pair2', label:'2 PAIR'},
+      {key:'full', label:'FULL (Kåk)'},
+      {key:'straight', label:'STRAIGHT'},
+      {key:'four', label:'FOUR'},
+      {key:'yan', label:'YAN'},
+      {key:'sumcol', label:'Summa kolumn', readonly:true},
+      {key:'total', label:'Total kolumn', readonly:true}
+    ];
+    rows.forEach(row => {
+      document.write('<tr><td>'+row.label+'</td>');
+      ['1','2','3','4'].forEach(col=>{
+        const id = `c${col}_${row.key}`;
+        const ro = row.readonly ? ' readonly class="readonly"' : '';
+        document.write(`<td><input type="number" id="${id}"${ro} /></td>`);
+      });
+      document.write('</tr>');
+    });
+  </script>
+</table>
+<button onclick="calculateAll()">Beräkna poäng</button>
+
+<script>
+function calculateColumn(col, multiplier) {
+  const sumVals = ['r1','r2','r3','r4','r5','r6'];
+  let sum16 = 0;
+  sumVals.forEach(r=>{
+    const v = parseInt(document.getElementById(`c${col}_${r}`).value);
+    if(!isNaN(v)) sum16 += v;
+  });
+  document.getElementById(`c${col}_sum16`).value = sum16;
+  let bonus = 0;
+  if(sum16 >= 70) bonus = 70;
+  else if(sum16 >= 60) bonus = 60;
+  document.getElementById(`c${col}_bonus`).value = bonus;
+
+  // MIN/MAX simple validation handled manually by user
+  const min = parseInt(document.getElementById(`c${col}_min`).value) || 0;
+  const max = parseInt(document.getElementById(`c${col}_max`).value) || 0;
+
+  const combKeys = ['pair2','full','straight','four','yan'];
+  let combSum = 0;
+  combKeys.forEach(key=>{
+    const v = parseInt(document.getElementById(`c${col}_${key}`).value);
+    if(!isNaN(v)) combSum += v;
+  });
+
+  const sumcol = sum16 + bonus + min + max + combSum;
+  document.getElementById(`c${col}_sumcol`).value = sumcol;
+  document.getElementById(`c${col}_total`).value = sumcol * multiplier;
+}
+
+function calculateAll() {
+  calculateColumn('1', 2);
+  calculateColumn('2', 1);
+  calculateColumn('3', 3);
+  calculateColumn('4', 4);
+  // Totalpoäng (för hela spelplan)
+  const totals = [1,2,3,4].map(col => parseInt(document.getElementById(`c${col}_total`).value) || 0);
+  const grand = totals.reduce((a,b)=>a+b, 0);
+  // Visa totalpoäng
+  let el = document.getElementById('grandTotal');
+  if(!el) {
+    el = document.createElement('h2');
+    el.id = 'grandTotal';
+    document.body.appendChild(el);
+  }
+  el.textContent = `🎉 Totalpoäng för denna spelplan: ${grand}`;
+}
+</script>
+
+</body>
+</html>
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8">
+  <title>Yan – Webbaserad Prototyp</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      margin: 20px;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      max-width: 800px;
+      margin-bottom: 20px;
+    }
+    th, td {
+      border: 1px solid #ccc;
+      padding: 8px;
+      text-align: center;
+    }
+    th {
+      background: #f5f5f5;
+    }
+    input[type="number"] {
+      width: 60px;
+      padding: 4px;
+      box-sizing: border-box;
+    }
+    .readonly {
+      background: #eee;
+    }
+    button {
+      padding: 10px 20px;
+      font-size: 16px;
+    }
+  </style>
+</head>
+<body>
+
+<h1>Yan – Webprototyp</h1>
+<p>Fyll i dina poäng och klicka “Beräkna” för att se totalsummor.</p>
+
+<table>
+  <tr>
+    <th>Ruta</th>
+    <th>Kolumn 1<br>Uppifrån &amp; ner (×2)</th>
+    <th>Kolumn 2<br>Fritt spel (×1)</th>
+    <th>Kolumn 3<br>Nerifrån &amp; upp (×3)</th>
+    <th>Kolumn 4<br>Första slaget (×4)</th>
+  </tr>
+  <script>
+    const rows = [
+      {key:'r1', label:'1:or'},
+      {key:'r2', label:'2:or'},
+      {key:'r3', label:'3:or'},
+      {key:'r4', label:'4:or'},
+      {key:'r5', label:'5:or'},
+      {key:'r6', label:'6:or'},
+      {key:'sum16', label:'Summa (1–6)', readonly:true},
+      {key:'bonus', label:'Bonus', readonly:true},
+      {key:'min', label:'MIN (-)'},
+      {key:'max', label:'MAX (+)'},
+      {key:'pair2', label:'2 PAIR'},
+      {key:'full', label:'FULL (Kåk)'},
+      {key:'straight', label:'STRAIGHT'},
+      {key:'four', label:'FOUR'},
+      {key:'yan', label:'YAN'},
+      {key:'sumcol', label:'Summa kolumn', readonly:true},
+      {key:'total', label:'Total kolumn', readonly:true}
+    ];
+    rows.forEach(row => {
+      document.write('<tr><td>'+row.label+'</td>');
+      ['1','2','3','4'].forEach(col=>{
+        const id = `c${col}_${row.key}`;
+        const ro = row.readonly ? ' readonly class="readonly"' : '';
+        document.write(`<td><input type="number" id="${id}"${ro} /></td>`);
+      });
+      document.write('</tr>');
+    });
+  </script>
+</table>
+<button onclick="calculateAll()">Beräkna poäng</button>
+
+<script>
+function calculateColumn(col, multiplier) {
+  const sumVals = ['r1','r2','r3','r4','r5','r6'];
+  let sum16 = 0;
+  sumVals.forEach(r=>{
+    const v = parseInt(document.getElementById(`c${col}_${r}`).value);
+    if(!isNaN(v)) sum16 += v;
+  });
+  document.getElementById(`c${col}_sum16`).value = sum16;
+  let bonus = 0;
+  if(sum16 >= 70) bonus = 70;
+  else if(sum16 >= 60) bonus = 60;
+  document.getElementById(`c${col}_bonus`).value = bonus;
+
+  // MIN/MAX simple validation handled manually by user
+  const min = parseInt(document.getElementById(`c${col}_min`).value) || 0;
+  const max = parseInt(document.getElementById(`c${col}_max`).value) || 0;
+
+  const combKeys = ['pair2','full','straight','four','yan'];
+  let combSum = 0;
+  combKeys.forEach(key=>{
+    const v = parseInt(document.getElementById(`c${col}_${key}`).value);
+    if(!isNaN(v)) combSum += v;
+  });
+
+  const sumcol = sum16 + bonus + min + max + combSum;
+  document.getElementById(`c${col}_sumcol`).value = sumcol;
+  document.getElementById(`c${col}_total`).value = sumcol * multiplier;
+}
+
+function calculateAll() {
+  calculateColumn('1', 2);
+  calculateColumn('2', 1);
+  calculateColumn('3', 3);
+  calculateColumn('4', 4);
+  // Totalpoäng (för hela spelplan)
+  const totals = [1,2,3,4].map(col => parseInt(document.getElementById(`c${col}_total`).value) || 0);
+  const grand = totals.reduce((a,b)=>a+b, 0);
+  // Visa totalpoäng
+  let el = document.getElementById('grandTotal');
+  if(!el) {
+    el = document.createElement('h2');
+    el.id = 'grandTotal';
+    document.body.appendChild(el);
+  }
+  el.textContent = `🎉 Totalpoäng för denna spelplan: ${grand}`;
+}
+</script>
+
+</body>
+</html>
