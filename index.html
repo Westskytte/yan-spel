@@ -77,9 +77,7 @@
     span.onclick = () => toggleHold(i);
     area.appendChild(span);
   });
-}
-  
-    
+}   
 function toggleHold(index) {
       if (rollCount === 0) return;
       held[index] = !held[index];
@@ -87,20 +85,32 @@ function toggleHold(index) {
     }
 
     function rollDice() {
-      if (rollCount >= maxRolls) {
-        alert("Du har redan kastat tre gånger.");
-        return;
-      }
-      for (let i = 0; i < 5; i++) {
-        if (!held[i]) {
-          dice[i] = Math.floor(Math.random() * 6) + 1;
-        }
-      }
-      rollCount++;
-      document.getElementById("rollsLeft").textContent = maxRolls - rollCount;
-      renderDice();
-    }
+  if (rollCount >= maxRolls) {
+    alert("Du har redan kastat tre gånger.");
+    return;
+  }
 
+  const rollingDuration = 600; // ms
+  const animationInterval = 50;
+  let frame = 0;
+
+  const interval = setInterval(() => {
+    for (let i = 0; i < 5; i++) {
+      if (!held[i]) {
+        dice[i] = Math.floor(Math.random() * 6) + 1;
+      }
+    }
+    renderDice(true); // visa som rullande
+    frame++;
+    if (frame * animationInterval >= rollingDuration) {
+      clearInterval(interval);
+      finalizeRoll();
+    }
+  }, animationInterval);
+
+  // Spela ljud (valfritt – ta bort kommentaren om du lägger till en mp3)
+  // new Audio('dice-roll.mp3').play();
+}
     function updateHighlight() {
   document.querySelectorAll('.highlight').forEach(cell => cell.classList.remove('highlight'));
 
