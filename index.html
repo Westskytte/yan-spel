@@ -2,269 +2,337 @@
 <html lang="sv">
 <head>
   <meta charset="UTF-8">
-  <title>Yan – Webbaserad Prototyp</title>
+  <title>YAN-spel</title>
   <style>
-    body {
-      font-family: sans-serif;
-      margin: 20px;
-    }
-    table {
-      border-collapse: collapse;
-      width: 100%;
-      max-width: 800px;
-      margin-bottom: 20px;
-    }
-    th, td {
-      border: 1px solid #ccc;
-      padding: 8px;
-      text-align: center;
-    }
-    th {
-      background: #f5f5f5;
-    }
-    input[type="number"] {
-      width: 60px;
-      padding: 4px;
-      box-sizing: border-box;
-    }
-    .readonly {
-      background: #eee;
-    }
-    button {
-      padding: 10px 20px;
-      font-size: 16px;
-    }
+    table { border-collapse: collapse; margin-top: 20px; }
+    td, th { border: 1px solid #000; padding: 8px; text-align: center; width: 60px; }
+    .filled { background-color: #ccc; }
+    .selected { background-color: #aad8ff; cursor: pointer; }
+    .disabled { background-color: #eee; color: #999; cursor: default; }
+    .highlight { animation: blink 1s infinite alternate; background-color: #ffd; }
+    @keyframes blink { 0% { background-color: #ffd; } 100% { background-color: #fff; } }
+    .sum-row { font-weight: bold; background-color: #f0f0f0; }
+    button { margin: 5px; padding: 10px; }
+    .dice { font-size: 32px; padding: 10px; margin: 5px; cursor: pointer; display: inline-block; border: 1px solid #aaa; border-radius: 5px; width: 40px; text-align: center; }@keyframes roll {
+  0% { transform: rotate(0deg); }
+  25% { transform: rotate(90deg); }
+  50% { transform: rotate(180deg); }
+  75% { transform: rotate(270deg); }
+  100% { transform: rotate(360deg); }
+}
+.dice.rolling {
+  animation: roll 0.3s linear infinite;
+  opacity: 0.7;
+}
   </style>
 </head>
 <body>
+  <h1>YAN – Enligt originalspelplan</h1>
+  <button onclick="rollDice()">Kasta tärningar</button>
+  <button onclick="resetGame()">Starta ny omgång</button>
+  <p>Kast kvar: <span id="rollsLeft">3</span></p>
+  <div id="diceArea"></div>
 
-<h1>Yan – Webprototyp</h1>
-<p>Fyll i dina poäng och klicka “Beräkna” för att se totalsummor.</p>
+  <table>
+  <thead>
+    <tr><th>Rad</th><th>⬇</th><th>L</th><th>⬆</th><th>1</th></tr>
+  </thead>
+    <tbody id="scoreTable"></tbody>
+<tfoot><tr><td><strong>TOTAL</strong></td><td colspan="4" id="grandTotal" class="sum-row"></td></tr></tfoot>
+  </table>
 
-<table>
-  <tr>
-    <th>Ruta</th>
-    <th>Kolumn 1<br>Uppifrån &amp; ner (×2)</th>
-    <th>Kolumn 2<br>Fritt spel (×1)</th>
-    <th>Kolumn 3<br>Nerifrån &amp; upp (×3)</th>
-    <th>Kolumn 4<br>Första slaget (×4)</th>
-  </tr>
   <script>
-    const rows = [
-      {key:'r1', label:'1:or'},
-      {key:'r2', label:'2:or'},
-      {key:'r3', label:'3:or'},
-      {key:'r4', label:'4:or'},
-      {key:'r5', label:'5:or'},
-      {key:'r6', label:'6:or'},
-      {key:'sum16', label:'Summa (1–6)', readonly:true},
-      {key:'bonus', label:'Bonus', readonly:true},
-      {key:'min', label:'MIN (-)'},
-      {key:'max', label:'MAX (+)'},
-      {key:'pair2', label:'2 PAIR'},
-      {key:'full', label:'FULL (Kåk)'},
-      {key:'straight', label:'STRAIGHT'},
-      {key:'four', label:'FOUR'},
-      {key:'yan', label:'YAN'},
-      {key:'sumcol', label:'Summa kolumn', readonly:true},
-      {key:'total', label:'Total kolumn', readonly:true}
-    ];
-    rows.forEach(row => {
-      document.write('<tr><td>'+row.label+'</td>');
-      ['1','2','3','4'].forEach(col=>{
-        const id = `c${col}_${row.key}`;
-        const ro = row.readonly ? ' readonly class="readonly"' : '';
-        document.write(`<td><input type="number" id="${id}"${ro} /></td>`);
-      });
-      document.write('</tr>');
-    });
-  </script>
-</table>
-<button onclick="calculateAll()">Beräkna poäng</button>
+    const labels = [
+  "1", "2", "3", "4", "5", "6", "SUMMA", "BONUS", "MIN", "MAX",
+  "2 PAR", "FULL", "STRAIGHT", "FOUR", "YAN", "SUMMA", "MULT.", "TOTAL"
+];
 
-<script>
-function calculateColumn(col, multiplier) {
-  const sumVals = ['r1','r2','r3','r4','r5','r6'];
-  let sum16 = 0;
-  sumVals.forEach(r=>{
-    const v = parseInt(document.getElementById(`c${col}_${r}`).value);
-    if(!isNaN(v)) sum16 += v;
-  });
-  document.getElementById(`c${col}_sum16`).value = sum16;
-  let bonus = 0;
-  if(sum16 >= 70) bonus = 70;
-  else if(sum16 >= 60) bonus = 60;
-  document.getElementById(`c${col}_bonus`).value = bonus;
+    let dice = [1, 1, 1, 1, 1];
+    let held = [false, false, false, false, false];
+    let rollCount = 0;
+    let currentColDown = 0;
+    let currentColUp = 16;
+    const maxRolls = 3;
 
-  // MIN/MAX simple validation handled manually by user
-  const min = parseInt(document.getElementById(`c${col}_min`).value) || 0;
-  const max = parseInt(document.getElementById(`c${col}_max`).value) || 0;
+    let colL, colDown, colUp, col1;
 
-  const combKeys = ['pair2','full','straight','four','yan'];
-  let combSum = 0;
-  combKeys.forEach(key=>{
-    const v = parseInt(document.getElementById(`c${col}_${key}`).value);
-    if(!isNaN(v)) combSum += v;
-  });
+    function initCards() {
+      colL = Array(18).fill(null);
+      colDown = Array(18).fill(null);
+      colUp = Array(18).fill(null);
+      col1 = Array(18).fill(null);
+    }
 
-  const sumcol = sum16 + bonus + min + max + combSum;
-  document.getElementById(`c${col}_sumcol`).value = sumcol;
-  document.getElementById(`c${col}_total`).value = sumcol * multiplier;
-}
-
-function calculateAll() {
-  calculateColumn('1', 2);
-  calculateColumn('2', 1);
-  calculateColumn('3', 3);
-  calculateColumn('4', 4);
-  // Totalpoäng (för hela spelplan)
-  const totals = [1,2,3,4].map(col => parseInt(document.getElementById(`c${col}_total`).value) || 0);
-  const grand = totals.reduce((a,b)=>a+b, 0);
-  // Visa totalpoäng
-  let el = document.getElementById('grandTotal');
-  if(!el) {
-    el = document.createElement('h2');
-    el.id = 'grandTotal';
-    document.body.appendChild(el);
+    function renderDice() {
+  const area = document.getElementById("diceArea");
+  area.innerHTML = "";
+  if (rollCount === 0) {
+    area.innerHTML = "<p>Klicka på 'Kasta tärningar' för att börja spelet.</p>";
+    return;
   }
-  el.textContent = `🎉 Totalpoäng för denna spelplan: ${grand}`;
-}
-</script>
-
-</body>
-</html>
-<!DOCTYPE html>
-<html lang="sv">
-<head>
-  <meta charset="UTF-8">
-  <title>Yan – Webbaserad Prototyp</title>
-  <style>
-    body {
-      font-family: sans-serif;
-      margin: 20px;
-    }
-    table {
-      border-collapse: collapse;
-      width: 100%;
-      max-width: 800px;
-      margin-bottom: 20px;
-    }
-    th, td {
-      border: 1px solid #ccc;
-      padding: 8px;
-      text-align: center;
-    }
-    th {
-      background: #f5f5f5;
-    }
-    input[type="number"] {
-      width: 60px;
-      padding: 4px;
-      box-sizing: border-box;
-    }
-    .readonly {
-      background: #eee;
-    }
-    button {
-      padding: 10px 20px;
-      font-size: 16px;
-    }
-  </style>
-</head>
-<body>
-
-<h1>Yan – Webprototyp</h1>
-<p>Fyll i dina poäng och klicka “Beräkna” för att se totalsummor.</p>
-
-<table>
-  <tr>
-    <th>Ruta</th>
-    <th>Kolumn 1<br>Uppifrån &amp; ner (×2)</th>
-    <th>Kolumn 2<br>Fritt spel (×1)</th>
-    <th>Kolumn 3<br>Nerifrån &amp; upp (×3)</th>
-    <th>Kolumn 4<br>Första slaget (×4)</th>
-  </tr>
-  <script>
-    const rows = [
-      {key:'r1', label:'1:or'},
-      {key:'r2', label:'2:or'},
-      {key:'r3', label:'3:or'},
-      {key:'r4', label:'4:or'},
-      {key:'r5', label:'5:or'},
-      {key:'r6', label:'6:or'},
-      {key:'sum16', label:'Summa (1–6)', readonly:true},
-      {key:'bonus', label:'Bonus', readonly:true},
-      {key:'min', label:'MIN (-)'},
-      {key:'max', label:'MAX (+)'},
-      {key:'pair2', label:'2 PAIR'},
-      {key:'full', label:'FULL (Kåk)'},
-      {key:'straight', label:'STRAIGHT'},
-      {key:'four', label:'FOUR'},
-      {key:'yan', label:'YAN'},
-      {key:'sumcol', label:'Summa kolumn', readonly:true},
-      {key:'total', label:'Total kolumn', readonly:true}
-    ];
-    rows.forEach(row => {
-      document.write('<tr><td>'+row.label+'</td>');
-      ['1','2','3','4'].forEach(col=>{
-        const id = `c${col}_${row.key}`;
-        const ro = row.readonly ? ' readonly class="readonly"' : '';
-        document.write(`<td><input type="number" id="${id}"${ro} /></td>`);
-      });
-      document.write('</tr>');
-    });
-  </script>
-</table>
-<button onclick="calculateAll()">Beräkna poäng</button>
-
-<script>
-function calculateColumn(col, multiplier) {
-  const sumVals = ['r1','r2','r3','r4','r5','r6'];
-  let sum16 = 0;
-  sumVals.forEach(r=>{
-    const v = parseInt(document.getElementById(`c${col}_${r}`).value);
-    if(!isNaN(v)) sum16 += v;
+  dice.forEach((val, i) => {
+    const span = document.createElement("span");
+    span.textContent = ["⚀","⚁","⚂","⚃","⚄","⚅"][val - 1];
+    span.className = held[i] ? "dice selected" : "dice";
+    span.onclick = () => toggleHold(i);
+    area.appendChild(span);
   });
-  document.getElementById(`c${col}_sum16`).value = sum16;
-  let bonus = 0;
-  if(sum16 >= 70) bonus = 70;
-  else if(sum16 >= 60) bonus = 60;
-  document.getElementById(`c${col}_bonus`).value = bonus;
-
-  // MIN/MAX simple validation handled manually by user
-  const min = parseInt(document.getElementById(`c${col}_min`).value) || 0;
-  const max = parseInt(document.getElementById(`c${col}_max`).value) || 0;
-
-  const combKeys = ['pair2','full','straight','four','yan'];
-  let combSum = 0;
-  combKeys.forEach(key=>{
-    const v = parseInt(document.getElementById(`c${col}_${key}`).value);
-    if(!isNaN(v)) combSum += v;
-  });
-
-  const sumcol = sum16 + bonus + min + max + combSum;
-  document.getElementById(`c${col}_sumcol`).value = sumcol;
-  document.getElementById(`c${col}_total`).value = sumcol * multiplier;
 }
+  
+    
+function toggleHold(index) {
+      if (rollCount === 0) return;
+      held[index] = !held[index];
+      renderDice();
+    }
 
-function calculateAll() {
-  calculateColumn('1', 2);
-  calculateColumn('2', 1);
-  calculateColumn('3', 3);
-  calculateColumn('4', 4);
-  // Totalpoäng (för hela spelplan)
-  const totals = [1,2,3,4].map(col => parseInt(document.getElementById(`c${col}_total`).value) || 0);
-  const grand = totals.reduce((a,b)=>a+b, 0);
-  // Visa totalpoäng
-  let el = document.getElementById('grandTotal');
-  if(!el) {
-    el = document.createElement('h2');
-    el.id = 'grandTotal';
-    document.body.appendChild(el);
+    function rollDice() {
+      if (rollCount >= maxRolls) {
+        alert("Du har redan kastat tre gånger.");
+        return;
+      }
+      for (let i = 0; i < 5; i++) {
+        if (!held[i]) {
+          dice[i] = Math.floor(Math.random() * 6) + 1;
+        }
+      }
+      rollCount++;
+      document.getElementById("rollsLeft").textContent = maxRolls - rollCount;
+      renderDice();
+    }
+
+    function updateHighlight() {
+  document.querySelectorAll('.highlight').forEach(cell => cell.classList.remove('highlight'));
+
+  const highlightCell = (col, row) => {
+    const cell = document.getElementById(`cell-${col}-${row}`);
+    if (cell && !cell.classList.contains("filled")) {
+      cell.classList.add("highlight");
+    }
+  };
+
+  // Highlight för kolumn ⬇ uppifrån
+  const nextDown = colDown.findIndex((v, i) => v === null && i >= 0 && i <= 13);
+  if (nextDown !== -1) highlightCell("⬇", nextDown);
+
+  // Highlight för kolumn ⬆ nedifrån
+  const reverseUp = [...colUp.keys()].filter(i => i >= 0 && i <= 14).reverse();
+  const nextUp = reverseUp.find(i => colUp[i] === null);
+  if (nextUp !== -1) highlightCell("⬆", nextUp);
+
+  // Highlight för kolumn 1 vid första kastet
+  if (rollCount === 1) {
+    const next = col1.findIndex((val, i) => i <= 13 && val === null);
+    if (next !== -1) highlightCell("1", next);
   }
-  el.textContent = `🎉 Totalpoäng för denna spelplan: ${grand}`;
 }
-</script>
 
+    function handleClick(col, row) {
+  if (rollCount === 0) {
+    alert("Du måste kasta tärningarna minst en gång innan du kan föra in poäng.");
+    return;
+  }
+  const card = col === 'L' ? colL : col === '⬇' ? colDown : col === '⬆' ? colUp : col1;
+  const maxVal = Math.max(...dice);
+
+  // Begränsning för MIN (rad 8)
+  if (row === 8) {
+    const minSum = dice.reduce((a, b) => a + b, 0);
+    if (minSum < 18) {
+      if (rollCount !== 3) return alert("MIN kräver minst 18 poäng på tärningarna.");
+      const confirmZero = confirm(`Du har under 18 poäng. Vill du sätta 0 i 'MIN' i kolumn '${col}'?`);
+      if (!confirmZero) return;
+      card[row] = 0;
+      const cell = document.getElementById(`cell-${col}-${row}`);
+      cell.textContent = 0;
+      cell.classList.add("filled");
+      cell.onclick = null;
+      rollCount = 0;
+      held = [false, false, false, false, false];
+      document.getElementById("rollsLeft").textContent = 3;
+      renderDice();
+      updateTotals();
+      return;
+    }
+    if (card[9] !== null && minSum >= card[9] && rollCount !== 3) return alert("MIN måste vara lägre än MAX om MAX redan är ifylld.");
+  }
+
+  // Begränsning för MAX (rad 9)
+  if (row === 9) {
+    const maxSum = dice.reduce((a, b) => a + b, 0);
+    if (card[8] !== null && maxSum <= card[8] && rollCount !== 3) return alert("MAX måste vara högre än MIN om MIN redan är ifylld.");
+  }
+
+  // Begränsning för MAX (rad 9)
+  if (row === 9) {
+    if (card[8] !== null && dice.reduce((a, b) => a + b, 0) <= card[8]) return alert("MAX måste vara högre än MIN om MIN redan är ifylld.");
+  }
+      if ([6, 7, 15, 16].includes(row)) return;
+
+      if (col === '1' && rollCount !== 1) return alert("I kolumn 1 får du bara föra in poäng efter första kastet.");
+      if (col === '⬇') {
+        const nextRow = colDown.findIndex((v, i) => v === null && i >= 0 && i <= 14);
+        if (row !== nextRow) return alert("Följ tvingande ordning uppifrån (⬇).");
+      }
+      if (col === '⬆') {
+        const reverseRows = [...colUp.keys()].filter(i => i >= 0 && i <= 14).reverse();
+        const nextRow = reverseRows.find(i => colUp[i] === null);
+        if (row !== nextRow) return alert("Följ tvingande ordning nedifrån (⬆).");
+      }
+
+      if (card[row] !== null) return alert("Redan ifylld ruta.");
+
+  // Tillåt att sätta 0 manuellt efter tredje kastet
+  if ((col === '1' && rollCount === 1) || (rollCount === 3)) {
+    let val = 0;
+    if (row >= 0 && row <= 5) val = dice.filter(d => d === row + 1).reduce((a, b) => a + b, 0);
+    else if (row === 8 || row === 9) val = dice.reduce((a, b) => a + b, 0);
+    else if (row === 10) val = hasTwoPairs() ? dice.reduce((a, b) => a + b, 0) : 0;
+    else if (row === 11) val = hasFullHouse() ? 25 : 0;
+    else if (row === 12) val = isStraight() ? 30 : 0;
+    else if (row === 13) val = hasFourOfKind() ? 40 : 0;
+    else if (row === 14) val = hasYan() ? 50 : 0;
+
+    const confirmSet = confirm(`Du kan få ${val} poäng i '${labels[row]}' i kolumn '${col}'.
+Tryck OK för att sätta ${val} eller Avbryt för att återgå.`);
+    if (!confirmSet) return;
+  }
+
+      let val = 0;
+      if (row >= 0 && row <= 5) val = dice.filter(d => d === row + 1).reduce((a, b) => a + b, 0);
+      else if (row === 8) val = dice.reduce((a, b) => a + b, 0); // MIN
+      else if (row === 9) val = dice.reduce((a, b) => a + b, 0); // MAX
+      else if (row === 10) val = hasTwoPairs() ? dice.reduce((a, b) => a + b, 0) : 0; // 2 PAR
+      else if (row === 11) val = hasFullHouse() ? 25 : 0;
+      else if (row === 12) val = isStraight() ? 30 : 0;
+      else if (row === 13) val = hasFourOfKind() ? 40 : 0;
+      else if (row === 14) val = hasYan() ? 50 : 0;
+
+      card[row] = val;
+      const cell = document.getElementById(`cell-${col}-${row}`);
+      cell.textContent = val;
+      cell.classList.add("filled");
+      cell.onclick = null;
+
+      if (col === '⬇') currentColDown++;
+      if (col === '⬆') currentColUp--;
+
+      rollCount = 0;
+      held = [false, false, false, false, false];
+      document.getElementById("rollsLeft").textContent = 3;
+      renderDice();
+      updateTotals();
+    }
+
+    function updateTotals() {
+  const allCols = { "⬇": colDown, "L": colL, "⬆": colUp, "1": col1 };
+  let totalSum = 0;
+  const multipliers = { "⬇": 2, "L": 1, "⬆": 3, "1": 4 };
+
+  for (const [col, arr] of Object.entries(allCols)) {
+    const sum = arr.slice(0, 6).reduce((a, b) => a + (b || 0), 0);
+    let bonus = 0;
+    if (sum >= 70) bonus = 70;
+    else if (sum >= 60) bonus = 60;
+    const min = arr[8] || 0;
+    const max = arr[9] || 0;
+    const mult = max - min;
+    const combo = arr.slice(10, 15).reduce((a, b) => a + (b || 0), 0);
+
+    arr[6] = sum;
+    arr[7] = bonus;
+    // Behåll spelarens YAN-poäng i rad 14
+    // Kombosummering till rad 15 istället
+    arr[15] = combo;
+    arr[16] = sum + bonus + min + max + combo;
+    arr[17] = arr[16] * multipliers[col];
+
+    totalSum += arr[17];
+
+    [6, 7, 15, 16, 17].forEach(i => {
+      const c = document.getElementById(`cell-${col}-${i}`);
+      if (c) {
+        c.textContent = arr[i];
+        c.classList.add("filled", "disabled");
+        c.onclick = null;
+      }
+    });
+  }
+
+  // Visa totalsumma per kolumn i TOTAL-raden (rad 17)
+  Object.entries(allCols).forEach(([col, arr]) => {
+    const cell = document.getElementById(`cell-${col}-17`);
+    if (cell) {
+      cell.textContent = arr[17];
+      cell.classList.add("filled", "disabled");
+      cell.onclick = null;
+    }
+  });
+
+  // Visa summerad TOTALPOÄNG under tärningarna
+  const totalDisplay = document.getElementById("totalDisplay");
+  if (totalDisplay) totalDisplay.remove();
+  const sumElement = document.createElement("p");
+  sumElement.id = "totalDisplay";
+  sumElement.innerHTML = `<strong>Spelarens TOTALPOÄNG: ${totalSum}</strong>`;
+  document.getElementById("diceArea").appendChild(sumElement);
+
+  // Uppdatera TOTAL-raden (rad 18 visuellt)
+  const grandTotal = document.getElementById("grandTotal");
+  if (grandTotal) grandTotal.textContent = totalSum;
+
+  updateHighlight();
+}
+
+    function renderTable() {
+      const tbody = document.getElementById("scoreTable");
+      tbody.innerHTML = "";
+      for (let i = 0; i < labels.length; i++) {
+  const tr = document.createElement("tr");
+  const td = document.createElement("td");
+  td.textContent = labels[i];
+  tr.appendChild(td);
+  ["⬇", "L", "⬆", "1"].forEach(col => {
+    const cell = document.createElement("td");
+    cell.id = `cell-${col}-${i}`;
+    if (![6, 7, 16, 17].includes(i)) {
+      cell.onclick = () => handleClick(col, i);
+      cell.title = `Klicka för att registrera i rad '${labels[i]}' i kolumn '${col}'`;
+    } else {
+      cell.classList.add("disabled");
+    }
+    tr.appendChild(cell);
+  });
+  tbody.appendChild(tr);
+      }
+    }
+
+    function resetGame() {
+  currentColDown = 0;
+  currentColUp = 16;
+  rollCount = 0;
+  held = [false, false, false, false, false];
+  document.getElementById("rollsLeft").textContent = 3;
+  initCards();
+  renderTable();
+
+  const area = document.getElementById("diceArea");
+  area.innerHTML = "<p>Klicka på 'Kasta tärningar' för att börja spelet.</p>";
+      renderDice();
+      updateHighlight();
+    }
+
+    const hasTwoPairs = () => Object.values(dice.reduce((a, b) => (a[b] = (a[b] || 0) + 1, a), {})).filter(x => x >= 2).length >= 2;
+    const hasFullHouse = () => { const c = Object.values(dice.reduce((a, b) => (a[b] = (a[b] || 0) + 1, a), {})); return c.includes(3) && c.includes(2); };
+    const isStraight = () => ["12345", "23456"].includes([...new Set(dice)].sort().join(""));
+    const hasFourOfKind = () => Object.values(dice.reduce((acc, val) => { acc[val] = (acc[val] || 0) + 1; return acc; }, {})).some(count => count >= 4);
+
+    const hasYan = () => Object.values(dice.reduce((acc, val) => { acc[val] = (acc[val] || 0) + 1; return acc; }, {})).some(count => count === 5);
+
+    initCards();
+    renderTable();
+    renderDice();
+    updateHighlight();
+  </script>
 </body>
 </html>
